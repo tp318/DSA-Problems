@@ -1,0 +1,51 @@
+name: Sync LeetCode Solutions
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    # Allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install requests PyYAML
+
+      - name: Sync LeetCode problems
+        env:
+          LEETCODE_USERNAME: ${{ secrets.LEETCODE_USERNAME }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python .github/scripts/sync_leetcode.py
+
+      - name: Commit changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "LeetCode Sync Bot"
+          git add -A
+          git commit -m "chore: sync LeetCode solutions" --allow-empty || true
+          git push
+
+      - name: Update statistics
+        run: |
+          python .github/scripts/update_stats.py
+          git config --local user.email "action@github.com"
+          git config --local user.name "LeetCode Sync Bot"
+          git add README.md
+          git commit -m "chore: update problem statistics" --allow-empty || true
+          git push
