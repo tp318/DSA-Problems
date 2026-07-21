@@ -23,7 +23,6 @@ def get_leetcode_submissions(username):
         titleSlug
         timestamp
         statusDisplay
-        difficulty
         lang
         url
       }
@@ -78,7 +77,16 @@ def get_leetcode_submissions(username):
         
         submissions = data.get("data", {}).get("recentSubmissionList", [])
         print(f"✅ Successfully fetched {len(submissions)} submissions")
-        return submissions
+        
+        # Fetch difficulty for each submission
+        submissions_with_difficulty = []
+        for submission in submissions:
+            slug = submission.get("titleSlug", "")
+            difficulty = get_problem_difficulty(slug, headers)
+            submission["difficulty"] = difficulty
+            submissions_with_difficulty.append(submission)
+        
+        return submissions_with_difficulty
         
     except requests.exceptions.Timeout:
         print(f"❌ Request timeout - LeetCode API is slow or unreachable")
@@ -89,6 +97,36 @@ def get_leetcode_submissions(username):
     except Exception as e:
         print(f"❌ Unexpected error: {type(e).__name__}: {e}")
         return []
+
+def get_problem_difficulty(slug, headers):
+    """Fetch problem difficulty by slug"""
+    query = """
+    query getProblem($slug: String!) {
+      problem(titleSlug: $slug) {
+        difficulty
+      }
+    }
+    """
+    
+    variables = {"slug": slug}
+    
+    try:
+        response = requests.post(
+            LEETCODE_GRAPHQL_URL,
+            json={"query": query, "variables": variables},
+            headers=headers,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            if "errors" not in data:
+                difficulty = data.get("data", {}).get("problem", {}).get("difficulty", "Easy")
+                return difficulty
+    except Exception as e:
+        pass
+    
+    return "Easy"  # Default to Easy if we can't fetch
 
 def map_difficulty(difficulty):
     """Map LeetCode difficulty to folder"""
