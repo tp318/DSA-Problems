@@ -14,6 +14,8 @@ LEETCODE_GRAPHQL_URL = "https://leetcode.com/graphql"
 
 def get_leetcode_submissions(username):
     """Fetch LeetCode submissions for a user"""
+    
+    # Updated GraphQL query with proper formatting
     query = """
     query getRecentSubmissions($username: String!, $limit: Int!) {
       recentSubmissionList(username: $username, limit: $limit) {
@@ -33,16 +35,46 @@ def get_leetcode_submissions(username):
         "limit": 50
     }
     
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://leetcode.com/",
+    }
+    
     try:
+        payload = {
+            "query": query,
+            "variables": variables
+        }
+        
+        print(f"Sending request to LeetCode GraphQL API...")
         response = requests.post(
             LEETCODE_GRAPHQL_URL,
-            json={"query": query, "variables": variables},
-            timeout=10
+            json=payload,
+            headers=headers,
+            timeout=15
         )
-        response.raise_for_status()
-        return response.json().get("data", {}).get("recentSubmissionList", [])
-    except Exception as e:
+        
+        print(f"Response status: {response.status_code}")
+        
+        if response.status_code != 200:
+            print(f"Error response: {response.text}")
+            return []
+        
+        data = response.json()
+        
+        if "errors" in data:
+            print(f"GraphQL errors: {data['errors']}")
+            return []
+        
+        submissions = data.get("data", {}).get("recentSubmissionList", [])
+        return submissions
+        
+    except requests.exceptions.RequestException as e:
         print(f"Error fetching LeetCode data: {e}")
+        return []
+    except json.JSONDecodeError as e:
+        print(f"Error parsing response: {e}")
         return []
 
 def map_difficulty(difficulty):
@@ -130,10 +162,17 @@ def main():
     submissions = get_leetcode_submissions(username)
     
     if not submissions:
-        print("No submissions found or unable to fetch data")
+        print("ℹ️  No submissions found or unable to fetch data")
+        print("This could mean:")
+        print("- The username is incorrect")
+        print("- LeetCode's API is temporarily unavailable")
+        print("- Your profile is not publicly visible")
         return
     
     print(f"✅ Found {len(submissions)} submissions")
+    
+    created_count = 0
+    skipped_count = 0
     
     for submission in submissions:
         if submission.get("statusDisplay") == "Accepted":
@@ -154,8 +193,12 @@ def main():
                 content = create_solution_file(title, slug, difficulty, url, lang)
                 with open(filepath, 'w') as f:
                     f.write(content)
+                created_count += 1
             else:
                 print(f"⏭️  Already exists: {filepath}")
+                skipped_count += 1
+    
+    print(f"\n📊 Summary: {created_count} created, {skipped_count} skipped")
 
 if __name__ == "__main__":
     main()
