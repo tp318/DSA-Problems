@@ -9,13 +9,13 @@ import requests
 import json
 from datetime import datetime
 from pathlib import Path
+import time
 
 LEETCODE_GRAPHQL_URL = "https://leetcode.com/graphql"
 
 def get_leetcode_submissions(username):
     """Fetch LeetCode submissions for a user"""
     
-    # Updated GraphQL query with proper formatting
     query = """
     query getRecentSubmissions($username: String!, $limit: Int!) {
       recentSubmissionList(username: $username, limit: $limit) {
@@ -35,46 +35,59 @@ def get_leetcode_submissions(username):
         "limit": 50
     }
     
+    # Headers mimicking a real browser
     headers = {
         "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": "https://leetcode.com/",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate",
+        "DNT": "1",
+        "Connection": "keep-alive",
+        "Referer": f"https://leetcode.com/u/{username}/",
     }
     
     try:
-        payload = {
-            "query": query,
-            "variables": variables
-        }
+        print(f"📤 Attempting to fetch data from LeetCode GraphQL API...")
+        print(f"📝 Query variables: username={username}, limit=50")
         
-        print(f"Sending request to LeetCode GraphQL API...")
         response = requests.post(
             LEETCODE_GRAPHQL_URL,
-            json=payload,
+            json={"query": query, "variables": variables},
             headers=headers,
-            timeout=15
+            timeout=20
         )
         
-        print(f"Response status: {response.status_code}")
+        print(f"📊 Response status: {response.status_code}")
         
         if response.status_code != 200:
-            print(f"Error response: {response.text}")
+            print(f"❌ HTTP Error: {response.status_code}")
+            print(f"Response text: {response.text[:500]}")
             return []
         
-        data = response.json()
+        try:
+            data = response.json()
+        except json.JSONDecodeError:
+            print(f"❌ Failed to parse JSON response")
+            print(f"Response: {response.text[:500]}")
+            return []
         
         if "errors" in data:
-            print(f"GraphQL errors: {data['errors']}")
+            print(f"❌ GraphQL Errors: {data['errors']}")
             return []
         
         submissions = data.get("data", {}).get("recentSubmissionList", [])
+        print(f"✅ Successfully fetched {len(submissions)} submissions")
         return submissions
         
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching LeetCode data: {e}")
+    except requests.exceptions.Timeout:
+        print(f"❌ Request timeout - LeetCode API is slow or unreachable")
         return []
-    except json.JSONDecodeError as e:
-        print(f"Error parsing response: {e}")
+    except requests.exceptions.ConnectionError:
+        print(f"❌ Connection error - Unable to reach LeetCode API")
+        return []
+    except Exception as e:
+        print(f"❌ Unexpected error: {type(e).__name__}: {e}")
         return []
 
 def map_difficulty(difficulty):
@@ -116,7 +129,7 @@ def create_solution_file(title, slug, difficulty, url, lang):
     return content
 
 def get_language_extension(lang):
-    """Get file extension for language"""
+    """Get code block language identifier"""
     extensions = {
         "python": "python",
         "python3": "python",
@@ -158,24 +171,33 @@ def main():
         print("3. Set it to your LeetCode username")
         return
     
-    print(f"📡 Fetching LeetCode problems for user: {username}")
+    print(f"🔄 Starting LeetCode sync for user: {username}")
+    print(f"⏰ Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    print("-" * 60)
+    
     submissions = get_leetcode_submissions(username)
     
+    print("-" * 60)
+    
     if not submissions:
-        print("ℹ️  No submissions found or unable to fetch data")
-        print("This could mean:")
-        print("- The username is incorrect")
-        print("- LeetCode's API is temporarily unavailable")
-        print("- Your profile is not publicly visible")
+        print("\n⚠️  No submissions found or unable to fetch data")
+        print("Possible reasons:")
+        print("  • Username is incorrect or profile doesn't exist")
+        print("  • LeetCode's API is temporarily down or rate-limited")
+        print("  • Your profile is set to private")
+        print("  • Network issue or firewall blocking the request")
         return
     
-    print(f"✅ Found {len(submissions)} submissions")
+    print(f"\n✅ Processing {len(submissions)} submissions...")
     
     created_count = 0
     skipped_count = 0
     
     for submission in submissions:
-        if submission.get("statusDisplay") == "Accepted":
+        status = submission.get("statusDisplay", "")
+        
+        # Only process accepted submissions
+        if status == "Accepted":
             title = submission.get("title", "Unknown")
             slug = submission.get("titleSlug", "")
             difficulty = submission.get("difficulty", "Easy")
@@ -187,18 +209,26 @@ def main():
             filepath = Path(folder) / filename
             
             if not filepath.exists():
-                print(f"📝 Creating: {filepath}")
-                filepath.parent.mkdir(parents=True, exist_ok=True)
-                
-                content = create_solution_file(title, slug, difficulty, url, lang)
-                with open(filepath, 'w') as f:
-                    f.write(content)
-                created_count += 1
+                try:
+                    print(f"  📝 Creating: {filepath}")
+                    filepath.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    content = create_solution_file(title, slug, difficulty, url, lang)
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    created_count += 1
+                except Exception as e:
+                    print(f"  ❌ Error creating {filepath}: {e}")
             else:
-                print(f"⏭️  Already exists: {filepath}")
+                print(f"  ⏭️  Already exists: {filepath}")
                 skipped_count += 1
     
-    print(f"\n📊 Summary: {created_count} created, {skipped_count} skipped")
+    print("\n" + "=" * 60)
+    print(f"📊 Sync Summary:")
+    print(f"  ✅ Created: {created_count}")
+    print(f"  ⏭️  Skipped: {skipped_count}")
+    print(f"  📦 Total: {created_count + skipped_count}")
+    print("=" * 60)
 
 if __name__ == "__main__":
     main()
