@@ -78,15 +78,13 @@ def get_leetcode_submissions(username):
         submissions = data.get("data", {}).get("recentSubmissionList", [])
         print(f"✅ Successfully fetched {len(submissions)} submissions")
         
-        # Fetch difficulty for each submission
-        submissions_with_difficulty = []
+        # Enrich each submission with difficulty from problem query
         for submission in submissions:
             slug = submission.get("titleSlug", "")
             difficulty = get_problem_difficulty(slug, headers)
             submission["difficulty"] = difficulty
-            submissions_with_difficulty.append(submission)
         
-        return submissions_with_difficulty
+        return submissions
         
     except requests.exceptions.Timeout:
         print(f"❌ Request timeout - LeetCode API is slow or unreachable")
@@ -99,16 +97,19 @@ def get_leetcode_submissions(username):
         return []
 
 def get_problem_difficulty(slug, headers):
-    """Fetch problem difficulty by slug"""
+    """Fetch problem difficulty by slug using problem query"""
+    if not slug:
+        return "Easy"
+    
     query = """
-    query getProblem($slug: String!) {
-      problem(titleSlug: $slug) {
+    query getProblem($titleSlug: String!) {
+      question(titleSlug: $titleSlug) {
         difficulty
       }
     }
     """
     
-    variables = {"slug": slug}
+    variables = {"titleSlug": slug}
     
     try:
         response = requests.post(
@@ -120,9 +121,16 @@ def get_problem_difficulty(slug, headers):
         
         if response.status_code == 200:
             data = response.json()
-            if "errors" not in data:
-                difficulty = data.get("data", {}).get("problem", {}).get("difficulty", "Easy")
-                return difficulty
+            # Check for errors first
+            if "errors" in data:
+                return "Easy"
+            
+            # Try to extract difficulty
+            question = data.get("data", {}).get("question", {})
+            if question:
+                difficulty = question.get("difficulty")
+                if difficulty:
+                    return difficulty
     except Exception as e:
         pass
     
