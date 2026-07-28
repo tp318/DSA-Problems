@@ -4,8 +4,8 @@ A collection of Data Structure and Algorithm problems solved on LeetCode, automa
 
 ## 📊 Statistics
 
-- **Total Problems Solved**: 3
-- **Easy**: 2
+- **Total Problems Solved**: 4
+- **Easy**: 3
 - **Medium**: 1
 - **Hard**: 0
 
@@ -76,4 +76,4 @@ To enable automatic LeetCode syncing:
 
 ---
 
-**Last Updated**: 2026-07-27 05:51:41 UTC
+**Last Updated**: 2026-07-28 05:15:33 UTC
